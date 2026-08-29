@@ -1,68 +1,162 @@
-# Uber_Lyft_Databricks_ELT_Tableau
-Databricks ELT pipeline for Uber/Lyft ride and weather data with Tableau Public analytics.
+# Uber/Lyft Databricks ELT Pipeline for Tableau
 
-## Pipeline Progress
+An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weather data, applies a Bronze–Silver–Gold medallion architecture, and prepares an analytics-ready dataset for Tableau Public.
 
-### Bronze Layer — Completed
+## Medallion Architecture Progress
 
-The Bronze layer incrementally ingests the original CSV files with Databricks Auto Loader and stores them as governed Delta tables in Unity Catalog.
+```mermaid
+flowchart LR
+    RAW["✅ Raw Data<br/>cab_rides.csv<br/>weather.csv"]:::complete
+    VOLUME["✅ Unity Catalog Volumes<br/>Governed file storage"]:::complete
+    BRONZE["✅ Bronze Layer<br/>Raw Delta tables<br/>Auto Loader + checkpoints"]:::complete
+    SILVER["✅ Silver Layer<br/>Cleaned and standardized<br/>Quality quarantine"]:::complete
+    GOLD["⬜ Gold Layer<br/>Business-level dataset<br/>Ride + weather integration"]:::pending
+    EXPORT["⬜ Tableau Export<br/>Analytics-ready CSV"]:::pending
+    TABLEAU["⬜ Tableau Public<br/>Interactive dashboard"]:::pending
 
-#### Source files
+    RAW --> VOLUME --> BRONZE --> SILVER --> GOLD --> EXPORT --> TABLEAU
+
+    classDef complete fill:#DCFCE7,stroke:#15803D,stroke-width:3px,color:#14532D;
+    classDef pending fill:#F3F4F6,stroke:#9CA3AF,stroke-width:2px,color:#4B5563;
+```
+
+**Legend:** ✅ Completed · ⬜ Pending
+
+## Pipeline Status
+
+| Stage | Status | Purpose |
+|---|---|---|
+| Raw data | ✅ Completed | Original Uber/Lyft ride and weather CSV files |
+| Unity Catalog volumes | ✅ Completed | Governed storage for source files, checkpoints, and exports |
+| Bronze | ✅ Completed | Incremental raw ingestion with Auto Loader |
+| Silver | ✅ Completed | Cleaning, standardization, enrichment, and quality control |
+| Gold | ⬜ Pending | Integrate rides with weather and create business-ready fields |
+| Tableau export | ⬜ Pending | Export the Gold dataset for Tableau Public |
+| Tableau dashboard | ⬜ Pending | Build interactive business visualizations |
+
+## Data Sources
 
 - `cab_rides.csv`
 - `weather.csv`
 
-The source CSV files are excluded from GitHub through `.gitignore`.
+The source CSV files are intentionally excluded from GitHub through `.gitignore`. They are uploaded to governed Databricks volumes for pipeline execution.
 
-#### Unity Catalog structure
+## Unity Catalog Structure
 
-- Catalog: `rideshare_elt`
-- Bronze schema: `rideshare_elt.bronze`
-- Silver schema: `rideshare_elt.silver`
-- Gold schema: `rideshare_elt.gold`
+```text
+rideshare_elt
+├── bronze
+│   ├── cab_rides_raw
+│   └── weather_raw
+├── silver
+│   ├── cab_rides_clean
+│   ├── cab_rides_quarantine
+│   └── weather_clean
+└── gold
+    └── Pending
+```
 
-#### Bronze Delta tables
+The project also uses Unity Catalog volumes for cab-rides files, weather files, pipeline checkpoints, and future Tableau exports.
+
+## Bronze Layer
+
+The Bronze layer incrementally ingests the original CSV files with Databricks Auto Loader and stores the raw values as Delta tables. Explicit schemas, source-file metadata, ingestion timestamps, rescued-data handling, and checkpoints make ingestion traceable and rerunnable.
+
+### Bronze Delta Tables
 
 - `rideshare_elt.bronze.cab_rides_raw`
 - `rideshare_elt.bronze.weather_raw`
 
-#### Bronze validation results
+### Bronze Validation
 
-| Dataset | Rows | Rescued rows | Source files |
-|---|---:|---:|---:|
-| Cab rides | 693,071 | 0 | 1 |
-| Weather | 6,276 | 0 | 1 |
+| Dataset | Rows | Nullable field | Null rows | Null rate | Rescued rows | Source files |
+|---|---:|---|---:|---:|---:|---:|
+| Cab rides | 693,071 | `price` | 55,095 | 7.95% | 0 | 1 |
+| Weather | 6,276 | `rain` | 5,382 | 85.76% | 0 | 1 |
 
-Additional quality observations:
+Other required source fields passed the null and validity checks.
 
-- Cab rides contain 55,095 records with a missing price.
-- Weather contains 5,382 records with a missing rain measurement.
-- Raw values remain unchanged in the Bronze layer.
-- Auto Loader checkpoints prevent previously processed files from being ingested again.
-- Ingestion timestamps and source-file metadata are included for traceability.
+- Missing cab prices remain unchanged in Bronze and are routed to a Silver quarantine table.
+- Missing weather rain values remain unchanged in the original `rain` column.
+- Zero rescued rows confirms that all source columns matched the declared ingestion schemas.
+- Auto Loader checkpoints prevent already processed files from being ingested again.
 
-## Current Architecture
+## Silver Layer
+
+The Silver layer cleans, standardizes, and enriches Bronze data while preserving records that fail analytical quality rules.
+
+### Silver Delta Tables
+
+| Table | Rows | Purpose |
+|---|---:|---|
+| `rideshare_elt.silver.cab_rides_clean` | 637,976 | Valid rides with usable prices |
+| `rideshare_elt.silver.cab_rides_quarantine` | 55,095 | Rides excluded from price analysis because the price is missing |
+| `rideshare_elt.silver.weather_clean` | 6,276 | Cleaned and standardized weather observations |
+
+The clean and quarantined cab-rides counts reconcile to all 693,071 Bronze records, so no source records were silently discarded.
+
+### Cab-Rides Transformations
+
+- Converted 13-digit Unix millisecond timestamps to UTC.
+- Created Boston-local timestamps using `America/New_York`.
+- Added local date, hour, weekday, and weekend fields.
+- Standardized location, provider, and ride-product text.
+- Added surge indicators and price-per-mile calculations.
+- Assigned explicit data-quality statuses.
+- Preserved all 55,095 missing-price records in the quarantine table.
+- Confirmed that all 693,071 ride IDs are unique.
+
+### Weather Transformations
+
+- Converted 10-digit Unix second timestamps to UTC.
+- Created Boston-local date and time fields.
+- Preserved the original nullable `rain` value.
+- Added `rain_was_missing` to identify source nulls.
+- Added analytics-ready `rain_amount`, replacing missing rain with `0.0`.
+- Added an `is_raining` indicator.
+- Validated 12 locations and 6,276 unique location–timestamp keys.
+- Confirmed that all 6,276 weather records passed the Silver quality rules.
+
+## Data-Quality Strategy
+
+This pipeline distinguishes between expected source nulls and ingestion failures:
+
+- A **null value** is a successfully ingested source value that is missing.
+- A **rescued value** is source data that could not fit the declared schema.
+- Missing ride prices are quarantined because they cannot support price analysis.
+- Missing rain remains auditable through `rain` and `rain_was_missing`, while `rain_amount` provides an analysis-ready value.
+- Bronze retains raw values; Silver applies business and quality rules.
+
+## Notebooks
+
+| Notebook | Status |
+|---|---|
+| `00_Environment_Validation.py` | ✅ Completed |
+| `01_Bronze_Ingestion.py` | ✅ Completed |
+| `02_Silver_Transformations.py` | ✅ Completed |
+| `03_Gold_Analytics.py` | ⬜ Next |
+
+## Repository Structure
 
 ```text
-CSV files
-    |
-    v
-Databricks Volumes
-    |
-    v
-Auto Loader
-    |
-    v
-Bronze Delta Tables  <-- Completed
-    |
-    v
-Silver Clean Tables  <-- Next
-    |
-    v
-Gold Tableau Dataset
-    |
-    v
-CSV Export
-    |
-    v
-Tableau Public
+Uber_Lyft_Databricks_ELT_Tableau
+├── notebooks
+│   ├── 00_Environment_Validation.py
+│   ├── 01_Bronze_Ingestion.py
+│   └── 02_Silver_Transformations.py
+├── sql
+├── data
+├── tableau
+├── docs
+├── images
+├── .gitignore
+└── README.md
+```
+
+## Tableau Public Delivery
+
+Tableau Public does not provide the same live Databricks connectivity as the full Tableau products. The planned Gold dataset will therefore be exported as an analytics-ready CSV and loaded into Tableau Public as an extract.
+
+## Next Phase
+
+The Gold layer will connect every valid ride to the closest appropriate weather observation, create business-ready dimensions and measures, validate the match quality, and produce the final Tableau export.
