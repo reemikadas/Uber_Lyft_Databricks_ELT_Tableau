@@ -1,26 +1,10 @@
 # Uber/Lyft Databricks ELT Pipeline for Tableau
 
-An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weather data, applies a Bronze–Silver–Gold medallion architecture, and prepares an analytics-ready dataset for Tableau Public.
+An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weather data, applies a Bronze–Silver–Gold medallion architecture, and prepares reusable Gold data for Tableau Public analytics and predictive machine learning.
 
 ## Medallion Architecture Progress
 
-```mermaid
-flowchart LR
-    RAW["✅ Raw Data<br/>cab_rides.csv<br/>weather.csv"]:::complete
-    VOLUME["✅ Unity Catalog Volumes<br/>Governed file storage"]:::complete
-    BRONZE["✅ Bronze Layer<br/>Raw Delta tables<br/>Auto Loader + checkpoints"]:::complete
-    SILVER["✅ Silver Layer<br/>Cleaned and standardized<br/>Quality quarantine"]:::complete
-    GOLD["⬜ Gold Layer<br/>Business-level dataset<br/>Ride + weather integration"]:::pending
-    EXPORT["⬜ Tableau Export<br/>Analytics-ready CSV"]:::pending
-    TABLEAU["⬜ Tableau Public<br/>Interactive dashboard"]:::pending
-
-    RAW --> VOLUME --> BRONZE --> SILVER --> GOLD --> EXPORT --> TABLEAU
-
-    classDef complete fill:#DCFCE7,stroke:#15803D,stroke-width:3px,color:#14532D;
-    classDef pending fill:#F3F4F6,stroke:#9CA3AF,stroke-width:2px,color:#4B5563;
-```
-
-**Legend:** ✅ Completed · ⬜ Pending
+![Uber/Lyft Databricks ELT architecture showing completed Bronze and Silver layers with planned Tableau and predictive ML outputs](images/uber_lyft_databricks_tableau_ml_architecture.png)
 
 ## Pipeline Status
 
@@ -33,6 +17,7 @@ flowchart LR
 | Gold | ⬜ Pending | Integrate rides with weather and create business-ready fields |
 | Tableau export | ⬜ Pending | Export the Gold dataset for Tableau Public |
 | Tableau dashboard | ⬜ Pending | Build interactive business visualizations |
+| Predictive ML model | ⬜ Pending | Engineer model features and predict ride prices |
 
 ## Data Sources
 
@@ -135,6 +120,7 @@ This pipeline distinguishes between expected source nulls and ingestion failures
 | `01_Bronze_Ingestion.py` | ✅ Completed |
 | `02_Silver_Transformations.py` | ✅ Completed |
 | `03_Gold_Analytics.py` | ⬜ Next |
+| `04_ML_Price_Prediction.py` | ⬜ Planned |
 
 ## Repository Structure
 
@@ -149,6 +135,7 @@ Uber_Lyft_Databricks_ELT_Tableau
 ├── tableau
 ├── docs
 ├── images
+│   └── uber_lyft_databricks_tableau_ml_architecture.png
 ├── .gitignore
 └── README.md
 ```
@@ -157,6 +144,10 @@ Uber_Lyft_Databricks_ELT_Tableau
 
 Tableau Public does not provide the same live Databricks connectivity as the full Tableau products. The planned Gold dataset will therefore be exported as an analytics-ready CSV and loaded into Tableau Public as an extract.
 
+## Predictive ML Delivery
+
+After the Tableau dashboard is complete, the same governed Gold data will support feature engineering and a predictive model for ride-price estimation. Potential features include provider, ride product, distance, surge multiplier, route, local time, temperature, rain, humidity, cloud cover, and wind.
+
 ## Next Phase
 
-The Gold layer will connect every valid ride to the closest appropriate weather observation, create business-ready dimensions and measures, validate the match quality, and produce the final Tableau export.
+The immediate next phase is the Gold layer: connect every valid ride to the closest appropriate weather observation, create business-ready dimensions and measures, validate match quality, and produce the Tableau export. After the Tableau Public dashboard is delivered, the project will continue with feature engineering, model training, evaluation, and ride-price prediction.
