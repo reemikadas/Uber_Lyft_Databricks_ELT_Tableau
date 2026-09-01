@@ -24,7 +24,7 @@ An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weat
 - `cab_rides.csv`
 - `weather.csv`
 
-The source CSV files are intentionally excluded from GitHub through `.gitignore`. They are uploaded to governed Databricks volumes for pipeline execution.
+The original public-source CSV files are included in `data/raw/` for reproducibility and are also uploaded to governed Databricks volumes for pipeline execution.
 
 ## Unity Catalog Structure
 

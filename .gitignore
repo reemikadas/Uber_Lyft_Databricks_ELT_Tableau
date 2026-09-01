@@ -5,7 +5,6 @@ __pycache__/
 .env
 *.log
 
-data/raw/*.csv
 data/raw/*.xlsx
 
 *.hyper
