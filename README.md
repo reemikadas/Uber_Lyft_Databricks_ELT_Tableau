@@ -4,7 +4,7 @@ An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weat
 
 ## Medallion Architecture Progress
 
-![Uber/Lyft Databricks ELT architecture showing completed Bronze and Silver layers with planned Tableau and predictive ML outputs](images/uber_lyft_databricks_tableau_ml_architecture.png)
+![Uber/Lyft Databricks ELT architecture showing completed Bronze, Silver, and Gold layers with planned Tableau and predictive ML outputs](images/uber_lyft_databricks_tableau_ml_architecture.png)
 
 ## Pipeline Status
 
@@ -14,7 +14,7 @@ An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weat
 | Unity Catalog volumes | ✅ Completed | Governed storage for source files, checkpoints, and exports |
 | Bronze | ✅ Completed | Incremental raw ingestion with Auto Loader |
 | Silver | ✅ Completed | Cleaning, standardization, enrichment, and quality control |
-| Gold | ⬜ Pending | Integrate rides with weather and create business-ready fields |
+| Gold | ✅ Completed | Integrate fare quotes with source and destination weather and publish a curated analytics table |
 | Tableau export | ⬜ Pending | Export the Gold dataset for Tableau Public |
 | Tableau dashboard | ⬜ Pending | Build interactive business visualizations |
 | Predictive ML model | ⬜ Pending | Engineer model features and predict ride prices |
@@ -38,7 +38,7 @@ rideshare_elt
 │   ├── cab_rides_quarantine
 │   └── weather_clean
 └── gold
-    └── Pending
+    └── rides_weather_enriched
 ```
 
 The project also uses Unity Catalog volumes for cab-rides files, weather files, pipeline checkpoints, and future Tableau exports.
@@ -112,6 +112,27 @@ This pipeline distinguishes between expected source nulls and ingestion failures
 - Missing rain remains auditable through `rain` and `rain_was_missing`, while `rain_amount` provides an analysis-ready value.
 - Bronze retains raw values; Silver applies business and quality rules.
 
+## Gold Layer
+
+The Gold layer combines every valid Silver fare quote with the nearest weather observation at both its source and destination. Both matches use the fare-query timestamp and a maximum tolerance of 60 minutes.
+
+### Gold Delta Table
+
+- `rideshare_elt.gold.rides_weather_enriched`
+
+### Gold Validation
+
+| Metric | Result |
+|---|---:|
+| Rows | 637,976 |
+| Unique fare-quote IDs | 637,976 |
+| Curated columns | 36 |
+| Source-weather match rate | 100% |
+| Destination-weather match rate | 100% |
+| Weather-tolerance violations | 0 |
+
+The curated table maintains exactly one row per valid fare quote and retains identifiers, provider and product attributes, source and destination locations, fare measures, query-time fields, endpoint weather features, and Gold refresh metadata.
+
 ## Notebooks
 
 | Notebook | Status |
@@ -119,8 +140,9 @@ This pipeline distinguishes between expected source nulls and ingestion failures
 | `00_Environment_Validation.py` | ✅ Completed |
 | `01_Bronze_Ingestion.py` | ✅ Completed |
 | `02_Silver_Transformations.py` | ✅ Completed |
-| `03_Gold_Analytics.py` | ⬜ Next |
-| `04_ML_Price_Prediction.py` | ⬜ Planned |
+| `03_Gold_Analytics.py` | ✅ Completed |
+| `04_Tableau_Export.py` | ⬜ Next |
+| `05_ML_Price_Prediction.py` | ⬜ Planned |
 
 ## Repository Structure
 
@@ -129,7 +151,8 @@ Uber_Lyft_Databricks_ELT_Tableau
 ├── notebooks
 │   ├── 00_Environment_Validation.py
 │   ├── 01_Bronze_Ingestion.py
-│   └── 02_Silver_Transformations.py
+│   ├── 02_Silver_Transformations.py
+│   └── 03_Gold_Analytics.py
 ├── sql
 ├── data
 ├── tableau
@@ -142,7 +165,7 @@ Uber_Lyft_Databricks_ELT_Tableau
 
 ## Tableau Public Delivery
 
-Tableau Public does not provide the same live Databricks connectivity as the full Tableau products. The planned Gold dataset will therefore be exported as an analytics-ready CSV and loaded into Tableau Public as an extract.
+Tableau Public does not provide the same live Databricks connectivity as the full Tableau products. The completed Gold dataset will therefore be exported as an analytics-ready CSV and loaded into Tableau Public as an extract.
 
 ## Predictive ML Delivery
 
@@ -150,4 +173,4 @@ After the Tableau dashboard is complete, the same governed Gold data will suppor
 
 ## Next Phase
 
-The immediate next phase is the Gold layer: connect every valid ride to the closest appropriate weather observation, create business-ready dimensions and measures, validate match quality, and produce the Tableau export. After the Tableau Public dashboard is delivered, the project will continue with feature engineering, model training, evaluation, and ride-price prediction.
+The immediate next phase is to export the curated Gold table as a Tableau-ready CSV and build the Tableau Public dashboard. After the dashboard is delivered, the project will continue with feature engineering, model training, evaluation, and ride-price prediction.
