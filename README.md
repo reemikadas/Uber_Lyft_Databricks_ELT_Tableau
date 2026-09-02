@@ -1,32 +1,69 @@
-# Uber/Lyft Databricks ELT Pipeline for Tableau
+# Uber/Lyft Databricks ELT, Tableau, and Predictive Modeling
 
-An end-to-end Databricks ELT project that ingests Uber/Lyft ride and Boston weather data, applies a Bronze–Silver–Gold medallion architecture, and prepares reusable Gold data for Tableau Public analytics and predictive machine learning.
+An end-to-end data engineering and analytics project that transforms public Uber/Lyft fare estimates and Boston weather observations into governed Delta tables, a Tableau-ready dataset, and a future ride-fare predictive model.
 
-## Medallion Architecture Progress
+The project demonstrates three connected delivery stages:
+
+1. **Databricks ELT pipeline:** ingest, validate, clean, standardize, integrate, and publish data through Bronze, Silver, and Gold layers.
+2. **Tableau Public analytics:** export the curated Gold dataset and build an interactive fare-analysis dashboard.
+3. **Predictive modeling:** engineer leakage-safe features and train a model to estimate ride fares.
+
+## Current Architecture
+
+```text
+Kaggle source files
+    │
+    ▼
+Unity Catalog Volumes
+    │
+    ▼
+Databricks ELT Pipeline
+    ├── Bronze: raw Delta tables + Auto Loader checkpoints
+    ├── Silver: cleaning, standardization, enrichment, and quarantine
+    └── Gold: fare quotes joined with source/destination weather
+           │
+           ├── Tableau-ready CSV ──► Tableau Public dashboard
+           │
+           └── Curated Gold data ──► Predictive ride-fare model
+```
+
+In this ELT design, the CSV files are loaded into Databricks before the main business transformations occur. Bronze, Silver, and Gold transformations therefore form the **Transform** stage of ELT.
+
+## Architecture Progress
 
 ![Uber/Lyft Databricks ELT architecture showing completed Bronze, Silver, and Gold layers with planned Tableau and predictive ML outputs](images/uber_lyft_databricks_tableau_ml_architecture.png)
 
 ## Pipeline Status
 
-| Stage | Status | Purpose |
+| Stage | Status | Result |
 |---|---|---|
-| Raw data | ✅ Completed | Original Uber/Lyft ride and weather CSV files |
-| Unity Catalog volumes | ✅ Completed | Governed storage for source files, checkpoints, and exports |
-| Bronze | ✅ Completed | Incremental raw ingestion with Auto Loader |
-| Silver | ✅ Completed | Cleaning, standardization, enrichment, and quality control |
-| Gold | ✅ Completed | Integrate fare quotes with source and destination weather and publish a curated analytics table |
-| Tableau export | ⬜ Pending | Export the Gold dataset for Tableau Public |
-| Tableau dashboard | ⬜ Pending | Build interactive business visualizations |
-| Predictive ML model | ⬜ Pending | Engineer model features and predict ride prices |
+| Kaggle source data | ✅ Completed | `cab_rides.csv` and `weather.csv` identified and downloaded |
+| Unity Catalog volumes | ✅ Completed | Governed source, checkpoint, and export storage created |
+| Bronze | ✅ Completed | Raw CSV data ingested with Auto Loader into Delta tables |
+| Silver | ✅ Completed | Fare and weather data cleaned, standardized, enriched, and validated |
+| Gold | ✅ Completed | Fare quotes matched to source and destination weather observations |
+| Tableau export | ✅ Completed | Validated 35-column CSV created from the curated Gold table |
+| Tableau dashboard | ⏭️ Next | Build and publish interactive Tableau Public visualizations |
+| Predictive ML model | ⬜ Planned | Engineer features, train models, and evaluate fare predictions |
 
-## Data Sources
+## Data Source
 
-- `cab_rides.csv`
-- `weather.csv`
+The project uses the public [Uber & Lyft Cab Prices dataset on Kaggle](https://www.kaggle.com/datasets/ravi72munde/uber-lyft-cab-prices), published under the **CC0: Public Domain** license.
 
-The original public-source CSV files are included in `data/raw/` for reproducibility and are also uploaded to governed Databricks volumes for pipeline execution.
+Source files:
 
-## Unity Catalog Structure
+- `cab_rides.csv` — Uber/Lyft fare estimates, provider and product information, locations, distance, price, and surge multiplier.
+- `weather.csv` — weather observations for the Boston locations represented in the fare data.
+
+Important context:
+
+- The records represent queried fare estimates, not confirmed completed trips.
+- `time_stamp` records the epoch time when the fare data was queried.
+- The source files cover selected Boston locations during November and December 2018.
+
+The large source CSV files are not duplicated in this repository. Download them from Kaggle and upload them to the corresponding Unity Catalog volumes before running the ingestion notebook.
+
+## Unity Catalog Design
 
 ```text
 rideshare_elt
@@ -41,11 +78,15 @@ rideshare_elt
     └── rides_weather_enriched
 ```
 
-The project also uses Unity Catalog volumes for cab-rides files, weather files, pipeline checkpoints, and future Tableau exports.
+Unity Catalog volumes hold the cab-rides source file, weather source file, Auto Loader checkpoints, and Tableau exports. The Tableau CSV is written to:
+
+```text
+/Volumes/rideshare_elt/gold/tableau_exports/rideshare_gold.csv
+```
 
 ## Bronze Layer
 
-The Bronze layer incrementally ingests the original CSV files with Databricks Auto Loader and stores the raw values as Delta tables. Explicit schemas, source-file metadata, ingestion timestamps, rescued-data handling, and checkpoints make ingestion traceable and rerunnable.
+The Bronze layer preserves the original source values while adding ingestion metadata, rescued-data handling, and Auto Loader checkpoints.
 
 ### Bronze Delta Tables
 
@@ -59,62 +100,40 @@ The Bronze layer incrementally ingests the original CSV files with Databricks Au
 | Cab rides | 693,071 | `price` | 55,095 | 7.95% | 0 | 1 |
 | Weather | 6,276 | `rain` | 5,382 | 85.76% | 0 | 1 |
 
-Other required source fields passed the null and validity checks.
-
-- Missing cab prices remain unchanged in Bronze and are routed to a Silver quarantine table.
+- Missing cab prices remain unchanged in Bronze.
 - Missing weather rain values remain unchanged in the original `rain` column.
-- Zero rescued rows confirms that all source columns matched the declared ingestion schemas.
+- Zero rescued rows confirms that the source columns matched the declared ingestion schemas.
 - Auto Loader checkpoints prevent already processed files from being ingested again.
 
 ## Silver Layer
 
-The Silver layer cleans, standardizes, and enriches Bronze data while preserving records that fail analytical quality rules.
+The Silver layer applies analytical quality rules while preserving rejected fare records in quarantine.
 
 ### Silver Delta Tables
 
 | Table | Rows | Purpose |
 |---|---:|---|
-| `rideshare_elt.silver.cab_rides_clean` | 637,976 | Valid rides with usable prices |
-| `rideshare_elt.silver.cab_rides_quarantine` | 55,095 | Rides excluded from price analysis because the price is missing |
+| `rideshare_elt.silver.cab_rides_clean` | 637,976 | Valid fare quotes with usable prices |
+| `rideshare_elt.silver.cab_rides_quarantine` | 55,095 | Fare quotes excluded from price analysis because price is missing |
 | `rideshare_elt.silver.weather_clean` | 6,276 | Cleaned and standardized weather observations |
 
-The clean and quarantined cab-rides counts reconcile to all 693,071 Bronze records, so no source records were silently discarded.
+The 637,976 clean and 55,095 quarantined fare records reconcile to all 693,071 Bronze records.
 
-### Cab-Rides Transformations
+### Key Silver Transformations
 
-- Converted 13-digit Unix millisecond timestamps to UTC.
+- Converted 13-digit fare-query epochs from milliseconds to UTC.
+- Converted 10-digit weather epochs from seconds to UTC.
 - Created Boston-local timestamps using `America/New_York`.
 - Added local date, hour, weekday, and weekend fields.
 - Standardized location, provider, and ride-product text.
 - Added surge indicators and price-per-mile calculations.
-- Assigned explicit data-quality statuses.
-- Preserved all 55,095 missing-price records in the quarantine table.
-- Confirmed that all 693,071 ride IDs are unique.
-
-### Weather Transformations
-
-- Converted 10-digit Unix second timestamps to UTC.
-- Created Boston-local date and time fields.
-- Preserved the original nullable `rain` value.
-- Added `rain_was_missing` to identify source nulls.
-- Added analytics-ready `rain_amount`, replacing missing rain with `0.0`.
-- Added an `is_raining` indicator.
-- Validated 12 locations and 6,276 unique location–timestamp keys.
-- Confirmed that all 6,276 weather records passed the Silver quality rules.
-
-## Data-Quality Strategy
-
-This pipeline distinguishes between expected source nulls and ingestion failures:
-
-- A **null value** is a successfully ingested source value that is missing.
-- A **rescued value** is source data that could not fit the declared schema.
-- Missing ride prices are quarantined because they cannot support price analysis.
-- Missing rain remains auditable through `rain` and `rain_was_missing`, while `rain_amount` provides an analysis-ready value.
-- Bronze retains raw values; Silver applies business and quality rules.
+- Preserved missing-price records in quarantine.
+- Preserved nullable source rain while adding analytics-ready `rain_amount` and `is_raining` fields.
+- Validated unique ride IDs and unique weather location–timestamp keys.
 
 ## Gold Layer
 
-The Gold layer combines every valid Silver fare quote with the nearest weather observation at both its source and destination. Both matches use the fare-query timestamp and a maximum tolerance of 60 minutes.
+The Gold layer matches every valid fare quote to the nearest weather observation at both its source and destination. Both matches use the fare-query timestamp and a maximum tolerance of 60 minutes.
 
 ### Gold Delta Table
 
@@ -131,18 +150,40 @@ The Gold layer combines every valid Silver fare quote with the nearest weather o
 | Destination-weather match rate | 100% |
 | Weather-tolerance violations | 0 |
 
-The curated table maintains exactly one row per valid fare quote and retains identifiers, provider and product attributes, source and destination locations, fare measures, query-time fields, endpoint weather features, and Gold refresh metadata.
+The resulting grain is exactly one row per valid fare quote. The table retains identifiers, provider and product attributes, source and destination locations, fare measures, query-time fields, endpoint weather features, and Gold refresh metadata.
+
+## Tableau Delivery
+
+The Tableau export notebook removes the pipeline-only `_gold_created_at` field and produces a 35-column CSV for Tableau Public.
+
+| Metric | Result |
+|---|---:|
+| Exported rows | 637,976 |
+| Unique fare-quote IDs | 637,976 |
+| Exported columns | 35 |
+| Export file | `rideshare_gold.csv` |
+| Export size | 199.52 MB |
+
+The exported CSV was read back into Spark and validated before download. It is excluded from regular Git tracking because its size exceeds GitHub's standard per-file limit. The next phase is to build and publish the Tableau Public dashboard.
+
+## Predictive Modeling Plan
+
+After the Tableau dashboard is complete, the governed Gold data will support a ride-fare regression workflow.
+
+Planned candidate features include provider, ride product, distance, surge multiplier, source, destination, route, local query time, temperature, rain, humidity, cloud cover, pressure, and wind.
+
+The target variable will be `price`. Derived fields such as `price_per_mile` must not be used as model inputs because they contain the target price and would introduce data leakage. Pipeline metadata such as `_gold_created_at` will also be excluded from modeling features.
 
 ## Notebooks
 
-| Notebook | Status |
-|---|---|
-| `00_Environment_Validation.py` | ✅ Completed |
-| `01_Bronze_Ingestion.py` | ✅ Completed |
-| `02_Silver_Transformations.py` | ✅ Completed |
-| `03_Gold_Analytics.py` | ✅ Completed |
-| `04_Tableau_Export.py` | ⬜ Next |
-| `05_ML_Price_Prediction.py` | ⬜ Planned |
+| Notebook | Status | Purpose |
+|---|---|---|
+| `00_Environment_Validation.py` | ✅ Completed | Validate source files, schemas, volumes, and compute |
+| `01_Bronze_Ingestion.py` | ✅ Completed | Incrementally ingest raw CSV files with Auto Loader |
+| `02_Silver_Transformations.py` | ✅ Completed | Clean, standardize, enrich, and quarantine records |
+| `03_Gold_Analytics.py` | ✅ Completed | Integrate fares with source and destination weather |
+| `04_Tableau_Export.py` | ✅ Completed | Validate and export the Tableau-ready Gold CSV |
+| `05_ML_Price_Prediction.py` | ⬜ Planned | Train and evaluate ride-fare prediction models |
 
 ## Repository Structure
 
@@ -152,25 +193,21 @@ Uber_Lyft_Databricks_ELT_Tableau
 │   ├── 00_Environment_Validation.py
 │   ├── 01_Bronze_Ingestion.py
 │   ├── 02_Silver_Transformations.py
-│   └── 03_Gold_Analytics.py
-├── sql
+│   ├── 03_Gold_Analytics.py
+│   └── 04_Tableau_Export.py
 ├── data
+│   └── .gitkeep
 ├── tableau
-├── docs
+│   ├── data                  # Local Tableau CSV; excluded from Git
+│   └── .gitkeep
 ├── images
 │   └── uber_lyft_databricks_tableau_ml_architecture.png
+├── docs
+├── sql
 ├── .gitignore
 └── README.md
 ```
 
-## Tableau Public Delivery
-
-Tableau Public does not provide the same live Databricks connectivity as the full Tableau products. The completed Gold dataset will therefore be exported as an analytics-ready CSV and loaded into Tableau Public as an extract.
-
-## Predictive ML Delivery
-
-After the Tableau dashboard is complete, the same governed Gold data will support feature engineering and a predictive model for ride-price estimation. Potential features include provider, ride product, distance, surge multiplier, route, local time, temperature, rain, humidity, cloud cover, and wind.
-
 ## Next Phase
 
-The immediate next phase is to export the curated Gold table as a Tableau-ready CSV and build the Tableau Public dashboard. After the dashboard is delivered, the project will continue with feature engineering, model training, evaluation, and ride-price prediction.
+Build the Tableau Public dashboard using `rideshare_gold.csv`, publish the workbook, and document its business insights. Predictive feature engineering and model development will follow after the dashboard is complete.

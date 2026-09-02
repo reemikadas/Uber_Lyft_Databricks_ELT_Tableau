@@ -6,5 +6,6 @@ __pycache__/
 *.log
 
 data/raw/*.csv
+tableau/data/*.csv
 
 *.hyper
