@@ -196,6 +196,7 @@ Uber_Lyft_Databricks_ELT_Tableau
 │   ├── 03_Gold_Analytics.py
 │   └── 04_Tableau_Export.py
 ├── data
+│   ├── raw                  # Original Source CSVs; excluded from Git
 │   └── .gitkeep
 ├── tableau
 │   ├── data                  # Local Tableau CSV; excluded from Git
