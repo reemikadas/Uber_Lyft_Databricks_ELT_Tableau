@@ -209,6 +209,13 @@ Uber_Lyft_Databricks_ELT_Tableau
 └── README.md
 ```
 
+### Supporting Folders
+
+- `docs/` — stores supporting project documentation, such as the data dictionary, architecture notes, validation summaries, Tableau dashboard screenshots, and recorded business insights.
+- `sql/` — stores reusable Databricks SQL queries for data-quality validation, exploratory analysis, Gold-table checks, and any SQL views or queries used to support Tableau.
+
+These folders currently contain placeholders and will be populated as the Tableau dashboard and predictive-modeling phases progress.
+
 ## Next Phase
 
 Build the Tableau Public dashboard using `rideshare_gold.csv`, publish the workbook, and document its business insights. Predictive feature engineering and model development will follow after the dashboard is complete.
